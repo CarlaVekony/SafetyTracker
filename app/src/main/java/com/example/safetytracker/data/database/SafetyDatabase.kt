@@ -1,6 +1,33 @@
 package com.example.safetytracker.data.database
 
-// TODO: Implement Room database
-// TODO: Define database version and migration strategy
-// TODO: Provide DAOs for EmergencyContact, EmergencyAlert, SensorData
-// TODO: Configure database name and export schema
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import com.example.safetytracker.data.model.EmergencyContact
+
+@Database(
+    entities = [EmergencyContact::class],
+    version = 1,
+    exportSchema = true
+)
+abstract class SafetyDatabase : RoomDatabase() {
+    abstract fun emergencyContactDao(): EmergencyContactDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: SafetyDatabase? = null
+
+        fun getDatabase(context: Context): SafetyDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    SafetyDatabase::class.java,
+                    "safety_database"
+                ).build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}
