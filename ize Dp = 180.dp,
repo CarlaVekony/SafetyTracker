@@ -1,0 +1,338 @@
+warning: in the working copy of 'app/src/main/java/com/example/safetytracker/MainActivity.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/example/safetytracker/ui/components/EmergencyButton.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/example/safetytracker/ui/screens/HomeScreen.kt', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/app/src/main/java/com/example/safetytracker/MainActivity.kt b/app/src/main/java/com/example/safetytracker/MainActivity.kt[m
+[1mindex 1a353bc..bdce40e 100644[m
+[1m--- a/app/src/main/java/com/example/safetytracker/MainActivity.kt[m
+[1m+++ b/app/src/main/java/com/example/safetytracker/MainActivity.kt[m
+[36m@@ -5,46 +5,34 @@[m [mimport androidx.activity.ComponentActivity[m
+ import androidx.activity.compose.setContent[m
+ import androidx.activity.enableEdgeToEdge[m
+ import androidx.compose.foundation.layout.fillMaxSize[m
+[31m-import androidx.compose.foundation.layout.padding[m
+[31m-import androidx.compose.material3.Scaffold[m
+[31m-import androidx.compose.material3.Text[m
+[32m+[m[32mimport androidx.compose.material3.Surface[m
+ import androidx.compose.runtime.Composable[m
+ import androidx.compose.ui.Modifier[m
+ import androidx.compose.ui.tooling.preview.Preview[m
+[32m+[m[32mimport com.example.safetytracker.ui.screens.HomeScreen[m
+ import com.example.safetytracker.ui.theme.SafetyTrackerTheme[m
+ [m
+[31m-// TODO: Implement main activity - entry point of the application[m
+[31m-// TODO: Add Start/Stop button for emergency detection[m
+[31m-// TODO: Integrate sensor managers and emergency detection logic[m
+ class MainActivity : ComponentActivity() {[m
+     override fun onCreate(savedInstanceState: Bundle?) {[m
+         super.onCreate(savedInstanceState)[m
+         enableEdgeToEdge()[m
+         setContent {[m
+[31m-            SafetyTrackerTheme {[m
+[31m-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->[m
+[31m-                    Greeting([m
+[31m-                        name = "Android",[m
+[31m-                        modifier = Modifier.padding(innerPadding)[m
+[31m-                    )[m
+[31m-                }[m
+[31m-            }[m
+[32m+[m[32m            SafetyTrackerApp()[m
+         }[m
+     }[m
+ }[m
+ [m
+ @Composable[m
+[31m-fun Greeting(name: String, modifier: Modifier = Modifier) {[m
+[31m-    Text([m
+[31m-        text = "Hello $name!",[m
+[31m-        modifier = modifier[m
+[31m-    )[m
+[32m+[m[32mfun SafetyTrackerApp() {[m
+[32m+[m[32m    SafetyTrackerTheme {[m
+[32m+[m[32m        Surface(modifier = Modifier.fillMaxSize()) {[m
+[32m+[m[32m            HomeScreen()[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+ }[m
+ [m
+ @Preview(showBackground = true)[m
+ @Composable[m
+[31m-fun GreetingPreview() {[m
+[31m-    SafetyTrackerTheme {[m
+[31m-        Greeting("Android")[m
+[31m-    }[m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m[32mprivate fun SafetyTrackerPreview() {[m
+[32m+[m[32m    SafetyTrackerApp()[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/safetytracker/ui/components/EmergencyButton.kt b/app/src/main/java/com/example/safetytracker/ui/components/EmergencyButton.kt[m
+[1mindex 4397a4f..5bc15b6 100644[m
+[1m--- a/app/src/main/java/com/example/safetytracker/ui/components/EmergencyButton.kt[m
+[1m+++ b/app/src/main/java/com/example/safetytracker/ui/components/EmergencyButton.kt[m
+[36m@@ -1,6 +1,209 @@[m
+ package com.example.safetytracker.ui.components[m
+ [m
+[31m-// TODO: Implement emergency Start/Stop button component[m
+[31m-// TODO: Add visual feedback for active/inactive states[m
+[31m-// TODO: Handle click events to start/stop sensor monitoring[m
+[31m-// TODO: Display appropriate icon and text based on state[m
+[32m+[m[32mimport android.util.Log[m
+[32m+[m[32mimport androidx.compose.animation.animateColorAsState[m
+[32m+[m[32mimport androidx.compose.foundation.Canvas[m
+[32m+[m[32mimport androidx.compose.foundation.layout.Arrangement[m
+[32m+[m[32mimport androidx.compose.foundation.layout.Column[m
+[32m+[m[32mimport androidx.compose.foundation.layout.Row[m
+[32m+[m[32mimport androidx.compose.foundation.layout.Spacer[m
+[32m+[m[32mimport androidx.compose.foundation.layout.fillMaxWidth[m
+[32m+[m[32mimport androidx.compose.foundation.layout.size[m
+[32m+[m[32mimport androidx.compose.foundation.layout.width[m
+[32m+[m[32mimport androidx.compose.foundation.shape.CircleShape[m
+[32m+[m[32mimport androidx.compose.material3.Button[m
+[32m+[m[32mimport androidx.compose.material3.ButtonDefaults[m
+[32m+[m[32mimport androidx.compose.material3.MaterialTheme[m
+[32m+[m[32mimport androidx.compose.material3.Text[m
+[32m+[m[32mimport androidx.compose.runtime.Composable[m
+[32m+[m[32mimport androidx.compose.runtime.LaunchedEffect[m
+[32m+[m[32mimport androidx.compose.runtime.getValue[m
+[32m+[m[32mimport androidx.compose.runtime.mutableStateOf[m
+[32m+[m[32mimport androidx.compose.runtime.remember[m
+[32m+[m[32mimport androidx.compose.runtime.saveable.rememberSaveable[m
+[32m+[m[32mimport androidx.compose.runtime.setValue[m
+[32m+[m[32mimport androidx.compose.ui.Alignment[m
+[32m+[m[32mimport androidx.compose.ui.Modifier[m
+[32m+[m[32mimport androidx.compose.ui.draw.clip[m
+[32m+[m[32mimport androidx.compose.ui.geometry.Offset[m
+[32m+[m[32mimport androidx.compose.ui.geometry.Size[m
+[32m+[m[32mimport androidx.compose.ui.graphics.Color[m
+[32m+[m[32mimport androidx.compose.ui.graphics.Path[m
+[32m+[m[32mimport androidx.compose.ui.graphics.drawscope.Stroke[m
+[32m+[m[32mimport androidx.compose.ui.unit.Dp[m
+[32m+[m[32mimport androidx.compose.ui.unit.dp[m
+[32m+[m[32mimport kotlinx.coroutines.delay[m
+[32m+[m[32mimport kotlinx.coroutines.isActive[m
+[32m+[m
+[32m+[m[32mprivate const val MONITORING_INTERVAL_MS = 5_000L[m
+[32m+[m[32mprivate const val DEFAULT_TAG = "EmergencyButton"[m
+[32m+[m
+[32m+[m[32m@Composable[m
+[32m+[m[32mfun EmergencyButton([m
+[32m+[m[32m    modifier: Modifier = Modifier,[m
+[32m+[m[32m    size: Dp = 180.dp,[m
+[32m+[m[32m    logTag: String = DEFAULT_TAG,[m
+[32m+[m[32m) {[m
+[32m+[m[32m    var isMonitoring by rememberSaveable { mutableStateOf(false) }[m
+[32m+[m[32m    var hasStarted by remember { mutableStateOf(false) }[m
+[32m+[m[32m    val buttonColor by animateColorAsState([m
+[32m+[m[32m        targetValue = if (isMonitoring) {[m
+[32m+[m[32m            MaterialTheme.colorScheme.primary[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            MaterialTheme.colorScheme.secondary[m
+[32m+[m[32m        },[m
+[32m+[m[32m        label = "EmergencyButtonColor",[m
+[32m+[m[32m    )[m
+[32m+[m
+[32m+[m[32m    LaunchedEffect(isMonitoring) {[m
+[32m+[m[32m        if (isMonitoring) {[m
+[32m+[m[32m            hasStarted = true[m
+[32m+[m[32m            Log.i(logTag, "Monitoring started")[m
+[32m+[m[32m            while (isActive) {[m
+[32m+[m[32m                delay(MONITORING_INTERVAL_MS)[m
+[32m+[m[32m                Log.i(logTag, "Monitoring sensors...")[m
+[32m+[m[32m            }[m
+[32m+[m[32m        } else if (hasStarted) {[m
+[32m+[m[32m            Log.i(logTag, "Monitoring stopped")[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    Column([m
+[32m+[m[32m        modifier = modifier,[m
+[32m+[m[32m        verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),[m
+[32m+[m[32m        horizontalAlignment = Alignment.CenterHorizontally,[m
+[32m+[m[32m    ) {[m
+[32m+[m[32m        Button([m
+[32m+[m[32m            onClick = { isMonitoring = !isMonitoring },[m
+[32m+[m[32m            modifier = Modifier.size(size),[m
+[32m+[m[32m            shape = CircleShape,[m
+[32m+[m[32m            colors = ButtonDefaults.buttonColors(containerColor = buttonColor),[m
+[32m+[m[32m        ) {[m
+[32m+[m[32m            if (isMonitoring) {[m
+[32m+[m[32m                PauseIcon([m
+[32m+[m[32m                    tint = MaterialTheme.colorScheme.onPrimary,[m
+[32m+[m[32m                    modifier = Modifier.size(size / 3),[m
+[32m+[m[32m                )[m
+[32m+[m[32m            } else {[m
+[32m+[m[32m                PlayIcon([m
+[32m+[m[32m                    tint = MaterialTheme.colorScheme.onSecondary,[m
+[32m+[m[32m                    modifier = Modifier.size(size / 3),[m
+[32m+[m[32m                )[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        MonitoringStatus([m
+[32m+[m[32m            isMonitoring = isMonitoring,[m
+[32m+[m[32m            modifier = Modifier.fillMaxWidth(),[m
+[32m+[m[32m        )[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m@Composable[m
+[32m+[m[32mprivate fun MonitoringStatus([m
+[32m+[m[32m    isMonitoring: Boolean,[m
+[32m+[m[32m    modifier: Modifier = Modifier,[m
+[32m+[m[32m) {[m
+[32m+[m[32m    val statusColor by animateColorAsState([m
+[32m+[m[32m        targetValue = if (isMonitoring) {[m
+[32m+[m[32m            MaterialTheme.colorScheme.primary[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            MaterialTheme.colorScheme.outline[m
+[32m+[m[32m        },[m
+[32m+[m[32m        label = "MonitoringStatusColor",[m
+[32m+[m[32m    )[m
+[32m+[m[32m    val statusText = if (isMonitoring) {[m
+[32m+[m[32m        "Monitoring in progress"[m
+[32m+[m[32m    } else {[m
+[32m+[m[32m        "Monitoring paused"[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    Column([m
+[32m+[m[32m        modifier = modifier,[m
+[32m+[m[32m        horizontalAlignment = Alignment.CenterHorizontally,[m
+[32m+[m[32m        verticalArrangement = Arrangement.spacedBy(12.dp),[m
+[32m+[m[32m    ) {[m
+[32m+[m[32m        Row([m
+[32m+[m[32m            verticalAlignment = Alignment.CenterVertically,[m
+[32m+[m[32m            horizontalArrangement = Alignment.Center,[m
+[32m+[m[32m        ) {[m
+[32m+[m[32m            StatusDot(color = statusColor)[m
+[32m+[m[32m            Spacer(modifier = Modifier.width(12.dp))[m
+[32m+[m[32m            Text([m
+[32m+[m[32m                text = statusText,[m
+[32m+[m[32m                style = MaterialTheme.typography.titleMedium,[m
+[32m+[m[32m            )[m
+[32m+[m[32m        }[m
+[32m+[m[32m        val helperText = if (isMonitoring) {[m
+[32m+[m[32m            "Logging sensor activity every 5 seconds"[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            "Press play to start monitoring"[m
+[32m+[m[32m        }[m
+[32m+[m[32m        Text([m
+[32m+[m[32m            text = helperText,[m
+[32m+[m[32m            style = MaterialTheme.typography.bodyMedium,[m
+[32m+[m[32m            color = MaterialTheme.colorScheme.onSurfaceVariant,[m
+[32m+[m[32m        )[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m@Composable[m
+[32m+[m[32mprivate fun StatusDot([m
+[32m+[m[32m    color: Color,[m
+[32m+[m[32m    modifier: Modifier = Modifier,[m
+[32m+[m[32m    strokeColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),[m
+[32m+[m[32m) {[m
+[32m+[m[32m    Canvas([m
+[32m+[m[32m        modifier = modifier[m
+[32m+[m[32m            .size(18.dp)[m
+[32m+[m[32m            .clip(CircleShape),[m
+[32m+[m[32m    ) {[m
+[32m+[m[32m        drawCircle([m
+[32m+[m[32m            color = strokeColor,[m
+[32m+[m[32m            style = Stroke(width = size.minDimension * 0.15f),[m
+[32m+[m[32m        )[m
+[32m+[m[32m        drawCircle([m
+[32m+[m[32m            color = color,[m
+[32m+[m[32m            radius = size.minDimension / 2.5f,[m
+[32m+[m[32m            center = center,[m
+[32m+[m[32m        )[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m@Composable[m
+[32m+[m[32mprivate fun PlayIcon([m
+[32m+[m[32m    tint: Color,[m
+[32m+[m[32m    modifier: Modifier = Modifier,[m
+[32m+[m[32m) {[m
+[32m+[m[32m    Canvas(modifier = modifier) {[m
+[32m+[m[32m        val path = Path().apply {[m
+[32m+[m[32m            moveTo(0f, 0f)[m
+[32m+[m[32m            lineTo(size.width, size.height / 2f)[m
+[32m+[m[32m            lineTo(0f, size.height)[m
+[32m+[m[32m            close()[m
+[32m+[m[32m        }[m
+[32m+[m[32m        drawPath(path = path, color = tint)[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m@Composable[m
+[32m+[m[32mprivate fun PauseIcon([m
+[32m+[m[32m    tint: Color,[m
+[32m+[m[32m    modifier: Modifier = Modifier,[m
+[32m+[m[32m) {[m
+[32m+[m[32m    Canvas(modifier = modifier) {[m
+[32m+[m[32m        val barWidth = size.width / 3f[m
+[32m+[m[32m        val gap = barWidth / 2f[m
+[32m+[m[32m        val leftBarStart = (size.width - (2 * barWidth + gap)) / 2f[m
+[32m+[m[32m        drawRect([m
+[32m+[m[32m            color = tint,[m
+[32m+[m[32m            topLeft = Offset(leftBarStart, 0f),[m
+[32m+[m[32m            size = Size(barWidth, size.height),[m
+[32m+[m[32m        )[m
+[32m+[m[32m        drawRect([m
+[32m+[m[32m            color = tint,[m
+[32m+[m[32m            topLeft = Offset(leftBarStart + barWidth + gap, 0f),[m
+[32m+[m[32m            size = Size(barWidth, size.height),[m
+[32m+[m[32m        )[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/safetytracker/ui/screens/HomeScreen.kt b/app/src/main/java/com/example/safetytracker/ui/screens/HomeScreen.kt[m
+[1mindex dd2b598..2a13305 100644[m
+[1m--- a/app/src/main/java/com/example/safetytracker/ui/screens/HomeScreen.kt[m
+[1m+++ b/app/src/main/java/com/example/safetytracker/ui/screens/HomeScreen.kt[m
+[36m@@ -1,6 +1,55 @@[m
+ package com.example.safetytracker.ui.screens[m
+ [m
+[31m-// TODO: Implement home screen - main UI of the application[m
+[31m-// TODO: Integrate EmergencyButton, ContactListView, SensorStatus components[m
+[31m-// TODO: Display current location if GPS is available[m
+[31m-// TODO: Show app status and last alert information[m
+[32m+[m[32mimport androidx.compose.foundation.layout.Arrangement[m
+[32m+[m[32mimport androidx.compose.foundation.layout.Column[m
+[32m+[m[32mimport androidx.compose.foundation.layout.PaddingValues[m
+[32m+[m[32mimport androidx.compose.foundation.layout.fillMaxSize[m
+[32m+[m[32mimport androidx.compose.foundation.layout.padding[m
+[32m+[m[32mimport androidx.compose.material3.MaterialTheme[m
+[32m+[m[32mimport androidx.compose.material3.Surface[m
+[32m+[m[32mimport androidx.compose.material3.Text[m
+[32m+[m[32mimport androidx.compose.runtime.Composable[m
+[32m+[m[32mimport androidx.compose.ui.Alignment[m
+[32m+[m[32mimport androidx.compose.ui.Modifier[m
+[32m+[m[32mimport androidx.compose.ui.text.style.TextAlign[m
+[32m+[m[32mimport androidx.compose.ui.tooling.preview.Preview[m
+[32m+[m[32mimport androidx.compose.ui.unit.dp[m
+[32m+[m[32mimport com.example.safetytracker.ui.components.EmergencyButton[m
+[32m+[m[32mimport com.example.safetytracker.ui.theme.SafetyTrackerTheme[m
+[32m+[m
+[32m+[m[32m@Composable[m
+[32m+[m[32mfun HomeScreen([m
+[32m+[m[32m    modifier: Modifier = Modifier,[m
+[32m+[m[32m    contentPadding: PaddingValues = PaddingValues(24.dp),[m
+[32m+[m[32m) {[m
+[32m+[m[32m    Surface(modifier = modifier.fillMaxSize()) {[m
+[32m+[m[32m        Column([m
+[32m+[m[32m            modifier = Modifier[m
+[32m+[m[32m                .fillMaxSize()[m
+[32m+[m[32m                .padding(contentPadding),[m
+[32m+[m[32m            horizontalAlignment = Alignment.CenterHorizontally,[m
+[32m+[m[32m            verticalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterVertically),[m
+[32m+[m[32m        ) {[m
+[32m+[m[32m            Text([m
+[32m+[m[32m                text = "Safety monitoring",[m
+[32m+[m[32m                style = MaterialTheme.typography.headlineSmall,[m
+[32m+[m[32m                textAlign = TextAlign.Center,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            Text([m
+[32m+[m[32m                text = "Use the play button to begin monitoring sensors. Press pause to stop.",[m
+[32m+[m[32m                style = MaterialTheme.typography.bodyMedium,[m
+[32m+[m[32m                textAlign = TextAlign.Center,[m
+[32m+[m[32m                color = MaterialTheme.colorScheme.onSurfaceVariant,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            Emergen
