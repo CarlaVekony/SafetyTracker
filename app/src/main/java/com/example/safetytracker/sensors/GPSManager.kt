@@ -7,9 +7,11 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.withContext
 
 data class LocationReading(
     val latitude: Double,
@@ -19,11 +21,12 @@ data class LocationReading(
 )
 
 class GPSManager(private val context: Context) {
-    private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    private val locationManager =
+        context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private var locationListener: LocationListener? = null
 
     fun getLocationData(): Flow<LocationReading> = callbackFlow {
-        // Check for location permissions
+        // Permissions
         if (ContextCompat.checkSelfPermission(
                 context,
                 android.Manifest.permission.ACCESS_FINE_LOCATION
@@ -37,7 +40,7 @@ class GPSManager(private val context: Context) {
             return@callbackFlow
         }
 
-        // Check if location services are enabled
+        // Providers
         if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) &&
             !locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
         ) {
@@ -56,26 +59,28 @@ class GPSManager(private val context: Context) {
                 trySend(reading)
             }
 
-            override fun onStatusChanged(provider: String, status: Int, extras: Bundle?) {}
+            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
             override fun onProviderEnabled(provider: String) {}
             override fun onProviderDisabled(provider: String) {}
         }
 
         try {
-            // Try GPS first, fall back to network
             val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
             var registered = false
 
-            for (provider in providers) {
-                if (locationManager.isProviderEnabled(provider)) {
-                    locationManager.requestLocationUpdates(
-                        provider,
-                        1000L, // Update every 1 second
-                        1f, // Minimum distance 1 meter
-                        locationListener!!
-                    )
-                    registered = true
-                    break
+            // 🔥 FIX: requestLocationUpdates MUST be on Main Thread
+            withContext(Dispatchers.Main) {
+                for (provider in providers) {
+                    if (locationManager.isProviderEnabled(provider)) {
+                        locationManager.requestLocationUpdates(
+                            provider,
+                            1000L,
+                            1f,
+                            locationListener!!
+                        )
+                        registered = true
+                        break
+                    }
                 }
             }
 
@@ -84,7 +89,7 @@ class GPSManager(private val context: Context) {
                 return@callbackFlow
             }
 
-            // Send current location immediately if available
+            // Last known location (safe anywhere)
             for (provider in providers) {
                 val lastLocation = locationManager.getLastKnownLocation(provider)
                 if (lastLocation != null) {
@@ -136,9 +141,8 @@ class GPSManager(private val context: Context) {
                     )
                 }
             }
-        } catch (e: SecurityException) {
-            // Permission denied
-        }
+        } catch (e: SecurityException) {}
+
         return null
     }
 
