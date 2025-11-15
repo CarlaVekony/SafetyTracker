@@ -10,6 +10,7 @@ import com.example.safetytracker.sensors.GPSManager
 import com.example.safetytracker.sensors.GyroscopeReading
 import com.example.safetytracker.sensors.LocationReading
 import com.example.safetytracker.sensors.MicrophoneManager
+import com.example.safetytracker.data.repository.EmergencyRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -21,7 +22,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Service that coordinates emergency detection and alert preparation
- * Does NOT send alerts, only prepares them
+ * Handles SMS sending automatically when emergencies are detected
  */
 class EmergencyAlertService(
     private val context: Context,
@@ -29,6 +30,8 @@ class EmergencyAlertService(
     private val gpsManager: GPSManager
 ) {
     private val fallDetectionAlgorithm = FallDetectionAlgorithm()
+    private val repository = EmergencyRepository.getInstance(context)
+    private val smsManager = EmergencySMSManager(context, repository)
     
     private val _preparedAlerts = MutableStateFlow<List<EmergencyAlert>>(emptyList())
     val preparedAlerts: StateFlow<List<EmergencyAlert>> = _preparedAlerts.asStateFlow()
@@ -160,7 +163,7 @@ class EmergencyAlertService(
     
     /**
      * Prepare an emergency alert with location and audio
-     * Does NOT send the alert, only prepares it
+     * Automatically sends SMS alerts to emergency contacts
      * Runs on background thread to avoid blocking
      */
     private fun prepareEmergencyAlert(detectionResult: FallDetectionResult) {
@@ -181,10 +184,25 @@ class EmergencyAlertService(
                 status = EmergencyAlert.AlertStatus.PREPARED
             )
             
-            // Add to prepared alerts list (StateFlow update is thread-safe)
-            _preparedAlerts.value = _preparedAlerts.value + alert
-            
             Log.i(TAG, "Emergency alert prepared: ID=${alert.id}, Location=${location?.latitude},${location?.longitude}, AudioSize=${audioData?.size ?: 0} bytes")
+            
+            // Send SMS automatically if device has SMS permission
+            if (context.hasSMSPermission()) {
+                try {
+                    val sentAlert = smsManager.sendEmergencyAlert(alert)
+                    
+                    // Update alerts list with final status
+                    _preparedAlerts.value = _preparedAlerts.value + sentAlert
+                    
+                    Log.i(TAG, "Emergency SMS sent with status: ${sentAlert.status}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send emergency SMS: ${e.message}")
+                    _preparedAlerts.value = _preparedAlerts.value + alert.copy(status = EmergencyAlert.AlertStatus.FAILED)
+                }
+            } else {
+                Log.w(TAG, "SMS permission not granted - cannot send emergency SMS")
+                _preparedAlerts.value = _preparedAlerts.value + alert.copy(status = EmergencyAlert.AlertStatus.FAILED)
+            }
         }
     }
     
@@ -200,5 +218,19 @@ class EmergencyAlertService(
      */
     fun clearPreparedAlerts() {
         _preparedAlerts.value = emptyList()
+    }
+    
+    /**
+     * Send a test SMS to verify emergency contacts work
+     */
+    suspend fun sendTestSMS(contact: com.example.safetytracker.data.model.EmergencyContact): Boolean {
+        return smsManager.sendTestMessage(contact)
+    }
+    
+    /**
+     * Manually send emergency SMS for a prepared alert
+     */
+    suspend fun sendEmergencySMS(alert: EmergencyAlert): EmergencyAlert {
+        return smsManager.sendEmergencyAlert(alert)
     }
 }
