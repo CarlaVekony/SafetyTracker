@@ -54,6 +54,7 @@ captures/
 .idea/compiler.xml
 .idea/deploymentTargetSelector.xml
 .idea/inspectionProfiles/
+.idea/deviceManager.xml
 
 # Keystore files
 *.jks
