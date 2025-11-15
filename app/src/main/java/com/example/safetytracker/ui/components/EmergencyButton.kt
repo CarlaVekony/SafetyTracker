@@ -43,6 +43,7 @@ fun EmergencyButton(
     modifier: Modifier = Modifier,
     size: Dp = 180.dp,
     logTag: String = DEFAULT_TAG,
+    onMonitoringStateChanged: (Boolean) -> Unit = {},
 ) {
     var isMonitoring by rememberSaveable { mutableStateOf(false) }
     var hasStarted by remember { mutableStateOf(false) }
@@ -56,6 +57,7 @@ fun EmergencyButton(
     )
 
     LaunchedEffect(isMonitoring) {
+        onMonitoringStateChanged(isMonitoring)
         if (isMonitoring) {
             hasStarted = true
             Log.i(logTag, "Monitoring started")
@@ -70,7 +72,7 @@ fun EmergencyButton(
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Button(
@@ -135,7 +137,7 @@ private fun MonitoringStatus(
             )
         }
         val helperText = if (isMonitoring) {
-            "Logging sensor activity every 5 seconds"
+            "Logging sensor activity"
         } else {
             "Press play to start monitoring"
         }
