@@ -386,6 +386,7 @@ fun ContactsScreenWithData() {
     val repository = remember { EmergencyRepository.getInstance(context) }
     
     var searchQuery by remember { mutableStateOf("") }
+    var showEditDialog by remember { mutableStateOf<EmergencyContact?>(null) }
     
     val contacts = repository.searchContacts(searchQuery).collectAsState(initial = emptyList())
     
@@ -409,11 +410,28 @@ fun ContactsScreenWithData() {
             }
         },
         onEditContact = { contact ->
-            // TODO: Implement edit functionality
-            // For now, just log the edit action
-            android.util.Log.d("ContactsScreen", "Edit contact: ${contact.name}")
+            showEditDialog = contact
         }
     )
+    
+    // Edit Contact Dialog
+    showEditDialog?.let { contactToEdit ->
+        EditContactDialog(
+            contact = contactToEdit,
+            onDismiss = { showEditDialog = null },
+            onConfirm = { updatedName, updatedPhone ->
+                scope.launch {
+                    repository.updateContact(
+                        contactToEdit.copy(
+                            name = updatedName.trim(),
+                            phoneNumber = updatedPhone.trim()
+                        )
+                    )
+                    showEditDialog = null
+                }
+            }
+        )
+    }
 }
 
 @Preview(showBackground = true)
@@ -626,5 +644,132 @@ private fun AnimatedContactCard(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditContactDialog(
+    contact: EmergencyContact,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, phone: String) -> Unit
+) {
+    var editedName by remember { mutableStateOf(contact.name) }
+    var editedPhone by remember { mutableStateOf(contact.phoneNumber) }
+    var isUpdating by remember { mutableStateOf(false) }
+    var dialogVisible by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(contact) {
+        dialogVisible = true
+    }
+    
+    AnimatedVisibility(
+        visible = dialogVisible,
+        enter = fadeIn(animationSpec = tween(200)) + scaleIn(
+            initialScale = 0.8f,
+            animationSpec = tween(200)
+        ),
+        exit = fadeOut(animationSpec = tween(200)) + scaleOut(
+            targetScale = 0.8f,
+            animationSpec = tween(200)
+        )
+    ) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isUpdating) {
+                    dialogVisible = false
+                    onDismiss()
+                }
+            },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Edit Contact")
+                }
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    OutlinedTextField(
+                        value = editedName,
+                        onValueChange = { editedName = it },
+                        label = { Text("Name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !isUpdating,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    
+                    OutlinedTextField(
+                        value = editedPhone,
+                        onValueChange = { editedPhone = it },
+                        label = { Text("Phone Number") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !isUpdating,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editedName.isNotBlank() && editedPhone.isNotBlank()) {
+                            isUpdating = true
+                            onConfirm(editedName, editedPhone)
+                            // Reset updating state after delay
+                            kotlinx.coroutines.GlobalScope.launch {
+                                delay(500)
+                                isUpdating = false
+                            }
+                        }
+                    },
+                    enabled = editedName.isNotBlank() && editedPhone.isNotBlank() && !isUpdating
+                ) {
+                    if (isUpdating) {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Updating...")
+                        }
+                    } else {
+                        Text("Update")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (!isUpdating) {
+                            dialogVisible = false
+                            onDismiss()
+                        }
+                    },
+                    enabled = !isUpdating
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
