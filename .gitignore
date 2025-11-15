@@ -51,6 +51,9 @@ captures/
 .idea/navEditor.xml
 .idea/modules.xml
 .idea/.name
+.idea/compiler.xml
+.idea/deploymentTargetSelector.xml
+.idea/inspectionProfiles/
 
 # Keystore files
 *.jks
@@ -98,3 +101,8 @@ app/audio/
 *.m4a
 *.3gp
 *.amr
+
+# VS Code
+*.vscode
+
+
