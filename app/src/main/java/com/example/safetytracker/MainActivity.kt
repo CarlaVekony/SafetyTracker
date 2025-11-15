@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
             SafetyTrackerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
-                        ContactsScreenWithData()
+                        HomeScreen()
                     }
                 }
             }
