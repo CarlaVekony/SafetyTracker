@@ -44,7 +44,10 @@ android {
     }
 
     testOptions {
-        unitTests.includeAndroidResources = true
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true  // Allow Android classes to return default values in unit tests
+        }
     }
 }
 
@@ -91,8 +94,9 @@ dependencies {
     testImplementation libs.junit
     testImplementation 'org.mockito:mockito-core:5.3.1'
     testImplementation 'org.mockito.kotlin:mockito-kotlin:5.1.0'
-    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
-    testImplementation 'androidx.arch.core:core-testing:2.2.0'
+    // Updated to latest stable version - fixes deprecated APIs and improves test reliability
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0'
+    // Removed androidx.arch.core:core-testing as it's deprecated and not used in tests
     testImplementation 'app.cash.turbine:turbine:1.0.0'
 
     androidTestImplementation libs.androidx.junit

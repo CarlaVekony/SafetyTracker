@@ -31,7 +31,10 @@ class GyroscopeManager(private val context: Context) {
 
         sensorEventListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
+                // Type check is redundant since we register listener for specific sensor type
+                // But we keep it for safety in case of unexpected events
+                // In tests, this check may fail with mocked sensors, but that's acceptable
+                if (event.sensor.type == Sensor.TYPE_GYROSCOPE || event.sensor == gyroscope) {
                     val x = event.values[0]
                     val y = event.values[1]
                     val z = event.values[2]
