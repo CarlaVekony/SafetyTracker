@@ -53,8 +53,8 @@ android {
 
 dependencies {
     // --- CORE ---
-    implementation libs.androidx.core.ktx
-    implementation libs.androidx.lifecycle.runtime.ktx
+	implementation "androidx.core:core-ktx:1.17.0"
+	implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.9.4"
 
     // --- COMPOSE BOM ---
     implementation platform("androidx.compose:compose-bom:2024.02.00")
@@ -81,8 +81,8 @@ dependencies {
     // --- DATASTORE ---
     implementation "androidx.datastore:datastore-preferences:1.0.0"
 
-    // --- PALETTE ---
-    implementation libs.androidx.palette.ktx
+	// --- PALETTE ---
+	implementation "androidx.palette:palette-ktx:1.0.0"
 
     // --- ROOM ---
     def room_version = "2.6.1"
@@ -92,8 +92,8 @@ dependencies {
 
     // --- TESTING ---
     testImplementation libs.junit
-    testImplementation 'org.mockito:mockito-core:5.3.1'
-    testImplementation 'org.mockito.kotlin:mockito-kotlin:5.1.0'
+	testImplementation 'org.mockito:mockito-core:5.14.2'
+	testImplementation 'org.mockito.kotlin:mockito-kotlin:5.3.1'
     // Updated to latest stable version - fixes deprecated APIs and improves test reliability
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0'
     // Removed androidx.arch.core:core-testing as it's deprecated and not used in tests

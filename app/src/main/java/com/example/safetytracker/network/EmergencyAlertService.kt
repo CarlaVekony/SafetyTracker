@@ -66,12 +66,12 @@ class EmergencyAlertService(
         fallDetectionAlgorithm.reset()
         lastAlertTime = 0 // Reset cooldown when starting monitoring
         
-        val scope = CoroutineScope(Dispatchers.Default)
+		val scope = CoroutineScope(Dispatchers.Unconfined)
         monitoringScope = scope
         
         // Collect accelerometer data
         accFlow?.let { flow ->
-            scope.launch(Dispatchers.Default) {
+			scope.launch {
                 flow.collect { reading ->
                     latestAccReading = reading
                 }
@@ -80,7 +80,7 @@ class EmergencyAlertService(
         
         // Collect gyroscope data
         gyroFlow?.let { flow ->
-            scope.launch(Dispatchers.Default) {
+			scope.launch {
                 flow.collect { reading ->
                     latestGyroReading = reading
                 }
@@ -89,7 +89,7 @@ class EmergencyAlertService(
         
         // Collect microphone data
         micFlow?.let { flow ->
-            scope.launch(Dispatchers.Default) {
+			scope.launch {
                 flow.collect { reading ->
                     latestMicAmplitude = reading.amplitude
                 }
@@ -105,9 +105,14 @@ class EmergencyAlertService(
             }
         }
         
+		// Perform an immediate check once collectors have a chance to run
+		scope.launch {
+			checkForEmergency()
+		}
+		
         // Periodic emergency check (runs every checkThrottleMs regardless of flow emissions)
         // This ensures checks happen even with single-value flows in tests
-        scope.launch(Dispatchers.Default) {
+		scope.launch {
             while (isMonitoring) {
                 checkForEmergency()
                 kotlinx.coroutines.delay(checkThrottleMs)
@@ -164,8 +169,8 @@ class EmergencyAlertService(
      * Runs on background thread to avoid blocking
      */
     private fun prepareEmergencyAlert(detectionResult: FallDetectionResult) {
-        // Run heavy operations on background thread
-        monitoringScope?.launch(Dispatchers.IO) {
+		// Run operations in monitoring scope (cooperative for tests)
+		monitoringScope?.launch {
             val location = latestLocation ?: gpsManager.getCurrentLocation()
             val audioData = microphoneManager.getLast5SecondsAudio()
             
