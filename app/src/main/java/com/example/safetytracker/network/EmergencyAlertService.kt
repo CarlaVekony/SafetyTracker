@@ -10,6 +10,7 @@ import com.example.safetytracker.sensors.GPSManager
 import com.example.safetytracker.sensors.GyroscopeReading
 import com.example.safetytracker.sensors.LocationReading
 import com.example.safetytracker.sensors.MicrophoneManager
+import com.example.safetytracker.data.repository.EmergencyRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -21,7 +22,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Service that coordinates emergency detection and alert preparation
- * Does NOT send alerts, only prepares them
+ * Handles SMS sending automatically when emergencies are detected
  */
 class EmergencyAlertService(
     private val context: Context,
@@ -29,6 +30,8 @@ class EmergencyAlertService(
     private val gpsManager: GPSManager
 ) {
     private val fallDetectionAlgorithm = FallDetectionAlgorithm()
+    private val repository = EmergencyRepository.getInstance(context)
+    private val smsManager = EmergencySMSManager(context, repository)
     
     private val _preparedAlerts = MutableStateFlow<List<EmergencyAlert>>(emptyList())
     val preparedAlerts: StateFlow<List<EmergencyAlert>> = _preparedAlerts.asStateFlow()
@@ -41,7 +44,6 @@ class EmergencyAlertService(
     private var isMonitoring = false
     private var monitoringScope: CoroutineScope? = null
     private var lastAlertTime: Long = 0
-    private var lastCheckTime: Long = 0
     private val alertCooldownMs = 10000L // 10 seconds cooldown between alerts
     private val checkThrottleMs = 200L // Only check for emergency every 200ms (throttle)
     
@@ -67,43 +69,35 @@ class EmergencyAlertService(
         fallDetectionAlgorithm.reset()
         lastAlertTime = 0 // Reset cooldown when starting monitoring
         
-        val scope = CoroutineScope(Dispatchers.Default)
+		val scope = CoroutineScope(Dispatchers.Unconfined)
         monitoringScope = scope
         
-        // Collect accelerometer data (throttled - don't check on every reading)
+        // Collect accelerometer data
         accFlow?.let { flow ->
-            scope.launch(Dispatchers.Default) {
+			scope.launch {
                 flow.collect { reading ->
                     latestAccReading = reading
-                    // Throttle emergency checks to avoid blocking
-                    val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastCheckTime >= checkThrottleMs) {
-                        lastCheckTime = currentTime
-                        checkForEmergency()
-                    }
                 }
             }
         }
         
-        // Collect gyroscope data (throttled)
+        // Collect gyroscope data
         gyroFlow?.let { flow ->
-            scope.launch(Dispatchers.Default) {
+			scope.launch {
                 flow.collect { reading ->
                     latestGyroReading = reading
-                    // Emergency check is throttled in accelerometer collector
                 }
             }
         }
         
         // Collect microphone data (throttled)
-        micFlow?.let { flow ->
-            scope.launch(Dispatchers.Default) {
-                flow.collect { reading ->
-                    latestMicAmplitude = reading.amplitude
-                    // Emergency check is throttled in accelerometer collector
-                }
-            }
-        }
+		// Always use this service's MicrophoneManager so the rolling buffer is filled
+		scope.launch(Dispatchers.Default) {
+			microphoneManager.getMicrophoneData().collect { reading ->
+				latestMicAmplitude = reading.amplitude
+				// Emergency check is throttled in accelerometer collector
+			}
+		}
         
         // Collect location data
         locationFlow?.let { flow ->
@@ -111,6 +105,20 @@ class EmergencyAlertService(
                 flow.collect { reading ->
                     latestLocation = reading
                 }
+            }
+        }
+        
+		// Perform an immediate check once collectors have a chance to run
+		scope.launch {
+			checkForEmergency()
+		}
+		
+        // Periodic emergency check (runs every checkThrottleMs regardless of flow emissions)
+        // This ensures checks happen even with single-value flows in tests
+		scope.launch {
+            while (isMonitoring) {
+                checkForEmergency()
+                kotlinx.coroutines.delay(checkThrottleMs)
             }
         }
         
@@ -128,6 +136,8 @@ class EmergencyAlertService(
         latestGyroReading = null
         latestMicAmplitude = null
         latestLocation = null
+		// Ensure microphone is released
+		microphoneManager.stop()
         Log.i(TAG, "Emergency monitoring stopped")
     }
     
@@ -160,12 +170,12 @@ class EmergencyAlertService(
     
     /**
      * Prepare an emergency alert with location and audio
-     * Does NOT send the alert, only prepares it
+     * Automatically sends SMS alerts to emergency contacts
      * Runs on background thread to avoid blocking
      */
     private fun prepareEmergencyAlert(detectionResult: FallDetectionResult) {
-        // Run heavy operations on background thread
-        monitoringScope?.launch(Dispatchers.IO) {
+		// Run operations in monitoring scope (cooperative for tests)
+		monitoringScope?.launch {
             val location = latestLocation ?: gpsManager.getCurrentLocation()
             val audioData = microphoneManager.getLast5SecondsAudio()
             
@@ -181,10 +191,34 @@ class EmergencyAlertService(
                 status = EmergencyAlert.AlertStatus.PREPARED
             )
             
-            // Add to prepared alerts list (StateFlow update is thread-safe)
-            _preparedAlerts.value = _preparedAlerts.value + alert
-            
             Log.i(TAG, "Emergency alert prepared: ID=${alert.id}, Location=${location?.latitude},${location?.longitude}, AudioSize=${audioData?.size ?: 0} bytes")
+			
+			// Immediately publish PREPARED alert so UI can react fast (popup)
+			_preparedAlerts.value = _preparedAlerts.value + alert
+            
+            // Send SMS automatically if device has SMS permission
+            if (context.hasSMSPermission()) {
+                try {
+                    val sentAlert = smsManager.sendEmergencyAlert(alert)
+                    
+					// Update existing alert with final status (replace by ID)
+					_preparedAlerts.value = _preparedAlerts.value.map {
+						if (it.id == alert.id) sentAlert else it
+					}
+                    
+                    Log.i(TAG, "Emergency SMS sent with status: ${sentAlert.status}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send emergency SMS: ${e.message}")
+					_preparedAlerts.value = _preparedAlerts.value.map {
+						if (it.id == alert.id) alert.copy(status = EmergencyAlert.AlertStatus.FAILED) else it
+					}
+                }
+            } else {
+                Log.w(TAG, "SMS permission not granted - cannot send emergency SMS")
+				_preparedAlerts.value = _preparedAlerts.value.map {
+					if (it.id == alert.id) alert.copy(status = EmergencyAlert.AlertStatus.FAILED) else it
+				}
+            }
         }
     }
     
@@ -200,5 +234,19 @@ class EmergencyAlertService(
      */
     fun clearPreparedAlerts() {
         _preparedAlerts.value = emptyList()
+    }
+    
+    /**
+     * Send a test SMS to verify emergency contacts work
+     */
+    suspend fun sendTestSMS(contact: com.example.safetytracker.data.model.EmergencyContact): Boolean {
+        return smsManager.sendTestMessage(contact)
+    }
+    
+    /**
+     * Manually send emergency SMS for a prepared alert
+     */
+    suspend fun sendEmergencySMS(alert: EmergencyAlert): EmergencyAlert {
+        return smsManager.sendEmergencyAlert(alert)
     }
 }

@@ -2,6 +2,7 @@ package com.example.safetytracker.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +19,9 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +39,8 @@ import com.example.safetytracker.ui.theme.SafetyTrackerTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -45,6 +51,7 @@ fun ContactsScreen(
     onAddContact: (name: String, phone: String) -> Unit = { _, _ -> },
     onDeleteContact: (EmergencyContact) -> Unit = {},
     onEditContact: (EmergencyContact) -> Unit = {},
+    onUpdateContactActive: (EmergencyContact, Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var name by remember { mutableStateOf("") }
@@ -52,6 +59,7 @@ fun ContactsScreen(
     var showDeleteDialog by remember { mutableStateOf<EmergencyContact?>(null) }
     var isAddingContact by remember { mutableStateOf(false) }
     var deletingContactId by remember { mutableStateOf<Long?>(null) }
+    var showManageActiveDialog by remember { mutableStateOf(false) }
     
     // Animation states
     var isVisible by remember { mutableStateOf(false) }
@@ -196,6 +204,37 @@ fun ContactsScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
+            // Manage Active Contacts Section
+            AnimatedVisibility(
+                visible = true,
+                enter = slideInVertically(
+                    initialOffsetY = { -it },
+                    animationSpec = tween(300, delayMillis = 300)
+                )
+            ) {
+                OutlinedButton(
+                    onClick = { showManageActiveDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Manage",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Manage Active Contacts")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    val activeCount = contacts.value.count { it.isActive }
+                    Text(
+                        text = "($activeCount/${contacts.value.size} active)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
             // Contacts List Section
             Text(
                 text = "Saved Contacts (${contacts.value.size})",
@@ -324,6 +363,127 @@ fun ContactsScreen(
             )
         }
     }
+    
+    // Manage Active Contacts Dialog
+    if (showManageActiveDialog) {
+        var tempActiveStates by remember { 
+            mutableStateOf(contacts.value.associate { it.id to it.isActive }) 
+        }
+        
+        AlertDialog(
+            onDismissRequest = { showManageActiveDialog = false },
+            title = { 
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Manage Active Contacts")
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Select which contacts should receive emergency alerts:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 300.dp)
+                    ) {
+                        items(contacts.value, key = { it.id }) { contact ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = LocalIndication.current
+                                    ) {
+                                        tempActiveStates = tempActiveStates.toMutableMap().apply {
+                                            this[contact.id] = !(this[contact.id] ?: false)
+                                        }
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = tempActiveStates[contact.id] ?: false,
+                                    onCheckedChange = { isChecked ->
+                                        tempActiveStates = tempActiveStates.toMutableMap().apply {
+                                            this[contact.id] = isChecked
+                                        }
+                                    }
+                                )
+                                
+                                Spacer(modifier = Modifier.width(12.dp))
+                                
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = contact.name,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = contact.phoneNumber,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                
+                                // Status indicator
+                                val isActive = tempActiveStates[contact.id] ?: false
+                                Icon(
+                                    imageVector = if (isActive) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                    contentDescription = if (isActive) "Active" else "Inactive",
+                                    tint = if (isActive) Color(0xFF4CAF50) else Color(0xFFF44336),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                    
+                    val selectedCount = tempActiveStates.values.count { it }
+                    Text(
+                        text = "$selectedCount of ${contacts.value.size} contacts selected",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Update contacts with new active states
+                        contacts.value.forEach { contact ->
+                            val newActiveState = tempActiveStates[contact.id] ?: contact.isActive
+                            if (newActiveState != contact.isActive) {
+                                onUpdateContactActive(contact, newActiveState)
+                            }
+                        }
+                        showManageActiveDialog = false
+                    }
+                ) {
+                    Text("Save Changes")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showManageActiveDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -345,10 +505,21 @@ private fun ContactCard(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = contact.name,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = contact.name,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = if (contact.isActive) "Active contact" else "Inactive contact",
+                        tint = if (contact.isActive) Color(0xFF4CAF50) else Color(0xFFF44336),
+                        modifier = Modifier.size(8.dp)
+                    )
+                }
                 Text(
                     text = contact.phoneNumber,
                     style = MaterialTheme.typography.bodyMedium,
@@ -411,6 +582,13 @@ fun ContactsScreenWithData() {
         },
         onEditContact = { contact ->
             showEditDialog = contact
+        },
+        onUpdateContactActive = { contact, isActive ->
+            scope.launch {
+                repository.updateContact(
+                    contact.copy(isActive = isActive)
+                )
+            }
         }
     )
     
@@ -595,10 +773,21 @@ private fun AnimatedContactCard(
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        text = contact.name,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = contact.name,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = if (contact.isActive) "Active contact" else "Inactive contact",
+                            tint = if (contact.isActive) Color(0xFF4CAF50) else Color(0xFFF44336),
+                            modifier = Modifier.size(8.dp)
+                        )
+                    }
                     Text(
                         text = contact.phoneNumber,
                         style = MaterialTheme.typography.bodyMedium,

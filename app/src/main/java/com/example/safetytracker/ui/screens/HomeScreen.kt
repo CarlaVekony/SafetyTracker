@@ -41,38 +41,46 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(24.dp),
+	contentPadding: PaddingValues = PaddingValues(24.dp),
+	enableEmergencyMonitoring: Boolean = true,
 ) {
     val context = LocalContext.current
     var isMonitoring by remember { mutableStateOf(false) }
     val sensorData = rememberSensorData(isMonitoring = isMonitoring)
     
     // Emergency alert service - share managers with SensorDataManager
-    val emergencyService = remember { 
+	val emergencyService = remember { 
         val micManager = MicrophoneManager(context)
         val gpsMgr = GPSManager(context)
         EmergencyAlertService(context, micManager, gpsMgr)
     }
     
     // Monitor prepared alerts (throttled collection to avoid blocking UI)
-    val preparedAlerts by emergencyService.preparedAlerts.collectAsState()
+	val preparedAlerts by if (enableEmergencyMonitoring) {
+		emergencyService.preparedAlerts.collectAsState()
+	} else {
+		// Dummy state for tests when emergency monitoring is disabled
+		mutableStateOf(emptyList())
+	}
     var showAlertPopup by remember { mutableStateOf(false) }
     var lastAlertId by remember { mutableStateOf<Long?>(null) }
     
     // Show popup when new alert is detected (runs on UI thread)
-    LaunchedEffect(preparedAlerts.size) {
-        val latestAlert = preparedAlerts.lastOrNull()
-        if (latestAlert != null && latestAlert.id != lastAlertId) {
-            lastAlertId = latestAlert.id
-            showAlertPopup = true
-            // Hide after 2 seconds
-            delay(2000)
-            showAlertPopup = false
-        }
-    }
+	if (enableEmergencyMonitoring) {
+		LaunchedEffect(preparedAlerts.size) {
+			val latestAlert = preparedAlerts.lastOrNull()
+			if (latestAlert != null && latestAlert.id != lastAlertId) {
+				lastAlertId = latestAlert.id
+				showAlertPopup = true
+				// Hide after 2 seconds
+				delay(2000)
+				showAlertPopup = false
+			}
+		}
+	}
     
-    // Share sensor managers with EmergencyAlertService to avoid duplicates
-    // Get sensor flows from SensorDataManager's internal managers
+	// Share sensor managers with EmergencyAlertService to avoid duplicates
+	// Use service's own MicrophoneManager to keep the rolling buffer filled
     LaunchedEffect(isMonitoring) {
         if (isMonitoring) {
             // Get sensor managers from SensorDataManager (they're already created there)
@@ -80,18 +88,17 @@ fun HomeScreen(
             // Actually, we need to create separate managers for emergency detection
             // to avoid conflicts. But we can optimize by throttling checks.
             
-            // Create managers for emergency detection (separate from graph display)
+			// Create managers for emergency detection (separate from graph display)
             val accManager = AccelerometerManager(context)
             val gyroManager = GyroscopeManager(context)
-            val micManager = MicrophoneManager(context)
             val gpsMgr = GPSManager(context)
             
             val accFlow = accManager.getAccelerometerData()
             val gyroFlow = gyroManager.getGyroscopeData()
-            val micFlow = micManager.getMicrophoneData()
             val locationFlow = gpsMgr.getLocationData()
             
-            emergencyService.startMonitoring(accFlow, gyroFlow, micFlow, locationFlow)
+			// Pass null for micFlow so the service uses its own MicrophoneManager
+			emergencyService.startMonitoring(accFlow, gyroFlow, null, locationFlow)
         } else {
             emergencyService.stopMonitoring()
         }
@@ -152,13 +159,15 @@ fun HomeScreen(
         }
         
         // Emergency alert popup overlay - positioned at top center, doesn't block screen
-        EmergencyAlertPopup(
-            isVisible = showAlertPopup,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 32.dp)
-                .zIndex(1000f)
-        )
+		if (enableEmergencyMonitoring) {
+			EmergencyAlertPopup(
+				isVisible = showAlertPopup,
+				modifier = Modifier
+					.align(Alignment.TopCenter)
+					.padding(top = 32.dp)
+					.zIndex(1000f)
+			)
+		}
     }
 }
 

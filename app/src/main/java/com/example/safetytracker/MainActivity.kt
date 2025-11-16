@@ -17,20 +17,17 @@ import com.example.safetytracker.navigation.SafetyTrackerBottomNavigation
 import com.example.safetytracker.navigation.SafetyTrackerNavHost
 import com.example.safetytracker.ui.screens.HomeScreen
 import com.example.safetytracker.ui.theme.SafetyTrackerTheme
+import com.example.safetytracker.utils.PermissionsManager
 
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Ask for core permissions (mic, SMS, location) when app opens, if not already granted
+        PermissionsManager.requestCorePermissionsIfNeeded(this)
         setContent {
-            SafetyTrackerTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Box(modifier = Modifier.padding(innerPadding)) {
-                        HomeScreen()
-                    }
-                }
-            }
+            SafetyTrackerApp()
         }
     }
 }
