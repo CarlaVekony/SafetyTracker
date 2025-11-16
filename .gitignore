@@ -106,4 +106,13 @@ app/audio/
 # VS Code
 *.vscode
 
+# Generated Compose preview junk
+Monitoring*
+Started*
+ize*
+tru_*
+ens*
+*.tmp
+*.swp
+
 
