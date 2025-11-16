@@ -161,9 +161,6 @@ class MicrophoneManager(private val context: Context) {
         }
     }
 
-    /**
-     * Clear the audio buffer
-     */
     fun clearBuffer() {
         synchronized(bufferLock) {
             bufferWriteIndex = 0
