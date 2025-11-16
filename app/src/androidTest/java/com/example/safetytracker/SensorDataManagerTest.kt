@@ -2,6 +2,7 @@ package com.example.safetytracker
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.safetytracker.ui.components.SensorDataState
 import com.example.safetytracker.ui.components.rememberSensorData
 import com.example.safetytracker.ui.theme.SafetyTrackerTheme
 import kotlinx.coroutines.delay
@@ -41,8 +42,8 @@ class SensorDataManagerTest {
             }
         }
 
-        // Wait for sensor data collection
-        delay(2100) // Wait for 2+ seconds to get at least 2 readings
+		// Wait for sensor data collection (wall-clock sleep to avoid coroutine context issues)
+		Thread.sleep(2100) // Wait for 2+ seconds to get at least 2 readings
         composeTestRule.waitForIdle()
 
         // After monitoring starts, data should be collected
@@ -54,17 +55,20 @@ class SensorDataManagerTest {
     fun sensorData_stopsWhenMonitoringStops() = runTest {
         var isMonitoring = true
 
-        composeTestRule.setContent {
-            SafetyTrackerTheme {
-                val data = rememberSensorData(isMonitoring = isMonitoring)
-                
-                // After some readings
-                delay(1100)
-                
-                // Stop monitoring
-                isMonitoring = false
-            }
-        }
+		composeTestRule.setContent {
+			SafetyTrackerTheme {
+				val data = rememberSensorData(isMonitoring = isMonitoring)
+			}
+		}
+
+		// After some readings
+		Thread.sleep(1100)
+
+		// Stop monitoring
+		composeTestRule.runOnUiThread {
+			isMonitoring = false
+		}
+		composeTestRule.waitForIdle()
 
         composeTestRule.waitForIdle()
         
@@ -72,8 +76,4 @@ class SensorDataManagerTest {
         // This is verified by the empty list check in the composable
     }
 }
-
-// Import needed for test
-import com.example.safetytracker.ui.components.SensorDataState
-
 
