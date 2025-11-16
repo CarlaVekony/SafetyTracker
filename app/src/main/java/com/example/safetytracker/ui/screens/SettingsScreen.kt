@@ -29,11 +29,15 @@ import androidx.compose.ui.unit.dp
 import com.example.safetytracker.data.preferences.UserPreferences
 import com.example.safetytracker.ui.theme.SafetyTrackerTheme
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAboutClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -41,7 +45,8 @@ fun SettingsScreen(
 
     val isDarkModeEnabled by prefs.isDarkModeEnabled.collectAsState(initial = false)
     val isDynamicColorsEnabled by prefs.isDynamicColorsEnabled.collectAsState(initial = true)
-    val isAutoMonitoringEnabled by prefs.isAutoMonitoringEnabled.collectAsState(initial = false)
+    // Monitoring preference retained in storage but no longer shown
+    // val isAutoMonitoringEnabled by prefs.isAutoMonitoringEnabled.collectAsState(initial = false)
 
     var isVisible by remember { mutableStateOf(false) }
 
@@ -87,59 +92,40 @@ fun SettingsScreen(
                 )
             }
 
-            // Monitoring
-            SettingsCard(
-                title = "Monitoring",
-                icon = Icons.Outlined.Security
+            // About (navigates to dedicated screen)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        onAboutClick()
+                    }
             ) {
-                SettingToggle(
-                    title = "Auto-start Monitoring",
-                    subtitle = "Begin monitoring when the app opens",
-                    isChecked = isAutoMonitoringEnabled,
-                    onToggle = { scope.launch { prefs.setAutoMonitoring(it) }},
-                    icon = Icons.Outlined.PlayArrow
-                )
-            }
-
-            // Emergency detection placeholder
-            SettingsCard(
-                title = "Emergency Detection",
-                icon = Icons.Outlined.Shield
-            ) {
-                Text(
-                    text = "Configure fall sensitivity and emergency thresholds",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Coming soon...",
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            // Notifications
-            SettingsCard(
-                title = "Notifications",
-                icon = Icons.Outlined.Notifications
-            ) {
-                Text(
-                    text = "Manage alert preferences and notification settings",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // About section
-            SettingsCard(
-                title = "About SafetyTracker",
-                icon = Icons.Outlined.Info
-            ) {
-                Text(
-                    text = "Version 1.0\nEmergency detection & alert system\n\nDeveloped for safety and peace of mind.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = "About",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("About", style = MaterialTheme.typography.titleMedium)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "View app version and details",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Tap to learn more",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
@@ -218,6 +204,30 @@ private fun SettingToggle(
         )
     }
 }
+
+@Composable
+fun AboutItem(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
 
 @Preview(showBackground = true)
 @Composable
