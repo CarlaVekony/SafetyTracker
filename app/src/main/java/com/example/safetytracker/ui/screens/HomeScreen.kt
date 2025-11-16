@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.example.safetytracker.data.preferences.UserPreferences
 import com.example.safetytracker.network.EmergencyAlertService
 import com.example.safetytracker.sensors.AccelerometerManager
 import com.example.safetytracker.sensors.GPSManager
@@ -45,8 +46,18 @@ fun HomeScreen(
 	enableEmergencyMonitoring: Boolean = true,
 ) {
     val context = LocalContext.current
+    val prefs = remember { UserPreferences.getInstance(context) }
+    val isAutoMonitoringEnabled by prefs.isAutoMonitoringEnabled.collectAsState(initial = false)
+    
     var isMonitoring by remember { mutableStateOf(false) }
     val sensorData = rememberSensorData(isMonitoring = isMonitoring)
+    
+    // Auto-start monitoring if enabled in settings
+    LaunchedEffect(isAutoMonitoringEnabled) {
+        if (isAutoMonitoringEnabled && !isMonitoring) {
+            isMonitoring = true
+        }
+    }
     
     // Emergency alert service - share managers with SensorDataManager
 	val emergencyService = remember { 

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.ContactPage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +34,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.provider.ContactsContract
+import android.database.Cursor
 import com.example.safetytracker.data.model.EmergencyContact
 import com.example.safetytracker.data.repository.EmergencyRepository
 import com.example.safetytracker.ui.theme.SafetyTrackerTheme
@@ -60,6 +66,7 @@ fun ContactsScreen(
     var isAddingContact by remember { mutableStateOf(false) }
     var deletingContactId by remember { mutableStateOf<Long?>(null) }
     var showManageActiveDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     
     // Animation states
     var isVisible by remember { mutableStateOf(false) }
@@ -164,38 +171,94 @@ fun ContactsScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        Button(
-                            onClick = {
-                                if (name.isNotBlank() && phoneNumber.isNotBlank()) {
-                                    isAddingContact = true
-                                    onAddContact(name.trim(), phoneNumber.trim())
-                                    name = ""
-                                    phoneNumber = ""
-                                    // Reset loading state after delay
-                                    kotlinx.coroutines.GlobalScope.launch {
-                                        delay(1000)
-                                        isAddingContact = false
+                        // Contact picker launcher
+                        val contactPickerLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.StartActivityForResult()
+                        ) { result ->
+                            if (result.resultCode == android.app.Activity.RESULT_OK) {
+                                result.data?.data?.let { uri ->
+                                    val projection = arrayOf(
+                                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                                        ContactsContract.CommonDataKinds.Phone.NUMBER
+                                    )
+                                    val cursor: Cursor? = context.contentResolver.query(
+                                        uri, projection, null, null, null
+                                    )
+                                    
+                                    cursor?.use {
+                                        if (it.moveToFirst()) {
+                                            val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                                            val phoneIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                            
+                                            if (nameIndex >= 0 && phoneIndex >= 0) {
+                                                val contactName = it.getString(nameIndex) ?: ""
+                                                val contactPhone = it.getString(phoneIndex) ?: ""
+                                                
+                                                if (contactName.isNotBlank() && contactPhone.isNotBlank()) {
+                                                    onAddContact(contactName.trim(), contactPhone.trim())
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            },
+                            }
+                        }
+                        
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = name.isNotBlank() && phoneNumber.isNotBlank() && !isAddingContact
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (isAddingContact) {
-                                Row(
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Adding...")
+                            Button(
+                                onClick = {
+                                    if (name.isNotBlank() && phoneNumber.isNotBlank()) {
+                                        isAddingContact = true
+                                        onAddContact(name.trim(), phoneNumber.trim())
+                                        name = ""
+                                        phoneNumber = ""
+                                        // Reset loading state after delay
+                                        kotlinx.coroutines.GlobalScope.launch {
+                                            delay(1000)
+                                            isAddingContact = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                enabled = name.isNotBlank() && phoneNumber.isNotBlank() && !isAddingContact
+                            ) {
+                                if (isAddingContact) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Adding...")
+                                    }
+                                } else {
+                                    Text("Add Contact")
                                 }
-                            } else {
-                                Text("Add Contact")
+                            }
+                            
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(Intent.ACTION_PICK).apply {
+                                        type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+                                    }
+                                    contactPickerLauncher.launch(intent)
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContactPage,
+                                    contentDescription = "Import",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Import")
                             }
                         }
                     }

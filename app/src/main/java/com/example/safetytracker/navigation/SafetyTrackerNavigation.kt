@@ -23,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.safetytracker.ui.screens.ContactsScreenWithData
 import com.example.safetytracker.ui.screens.HomeScreen
 import com.example.safetytracker.ui.screens.SettingsScreen
+import com.example.safetytracker.ui.screens.AboutScreen
 import com.example.safetytracker.ui.theme.SafetyTrackerTheme
 
 // Navigation destinations
@@ -70,7 +71,12 @@ fun SafetyTrackerNavHost(
         }
         
         composable(SafetyTrackerDestination.Settings.route) {
-            SettingsScreen()
+            SettingsScreen(
+                onAboutClick = { navController.navigate("about") }
+            )
+        }
+        composable("about") {
+            AboutScreen(onNavigateBack = { navController.popBackStack() })
         }
     }
 }
