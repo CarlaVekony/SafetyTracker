@@ -6,6 +6,7 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mock
+import org.mockito.Mockito.*
 import org.mockito.MockitoAnnotations
 
 class GPSManagerTest {
@@ -20,6 +21,8 @@ class GPSManagerTest {
     @Before
     fun setUp() {
         MockitoAnnotations.openMocks(this)
+        // Mock getSystemService to return the LocationManager
+        `when`(context.getSystemService(Context.LOCATION_SERVICE)).thenReturn(locationManager)
         gpsManager = GPSManager(context)
     }
 
