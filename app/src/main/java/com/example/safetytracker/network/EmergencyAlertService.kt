@@ -99,14 +99,13 @@ class EmergencyAlertService(
         }
         
         // Collect microphone data (throttled)
-        micFlow?.let { flow ->
-            scope.launch(Dispatchers.Default) {
-                flow.collect { reading ->
-                    latestMicAmplitude = reading.amplitude
-                    // Emergency check is throttled in accelerometer collector
-                }
-            }
-        }
+		// Always use this service's MicrophoneManager so the rolling buffer is filled
+		scope.launch(Dispatchers.Default) {
+			microphoneManager.getMicrophoneData().collect { reading ->
+				latestMicAmplitude = reading.amplitude
+				// Emergency check is throttled in accelerometer collector
+			}
+		}
         
         // Collect location data
         locationFlow?.let { flow ->
@@ -131,6 +130,8 @@ class EmergencyAlertService(
         latestGyroReading = null
         latestMicAmplitude = null
         latestLocation = null
+		// Ensure microphone is released
+		microphoneManager.stop()
         Log.i(TAG, "Emergency monitoring stopped")
     }
     
@@ -185,23 +186,32 @@ class EmergencyAlertService(
             )
             
             Log.i(TAG, "Emergency alert prepared: ID=${alert.id}, Location=${location?.latitude},${location?.longitude}, AudioSize=${audioData?.size ?: 0} bytes")
+			
+			// Immediately publish PREPARED alert so UI can react fast (popup)
+			_preparedAlerts.value = _preparedAlerts.value + alert
             
             // Send SMS automatically if device has SMS permission
             if (context.hasSMSPermission()) {
                 try {
                     val sentAlert = smsManager.sendEmergencyAlert(alert)
                     
-                    // Update alerts list with final status
-                    _preparedAlerts.value = _preparedAlerts.value + sentAlert
+					// Update existing alert with final status (replace by ID)
+					_preparedAlerts.value = _preparedAlerts.value.map {
+						if (it.id == alert.id) sentAlert else it
+					}
                     
                     Log.i(TAG, "Emergency SMS sent with status: ${sentAlert.status}")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to send emergency SMS: ${e.message}")
-                    _preparedAlerts.value = _preparedAlerts.value + alert.copy(status = EmergencyAlert.AlertStatus.FAILED)
+					_preparedAlerts.value = _preparedAlerts.value.map {
+						if (it.id == alert.id) alert.copy(status = EmergencyAlert.AlertStatus.FAILED) else it
+					}
                 }
             } else {
                 Log.w(TAG, "SMS permission not granted - cannot send emergency SMS")
-                _preparedAlerts.value = _preparedAlerts.value + alert.copy(status = EmergencyAlert.AlertStatus.FAILED)
+				_preparedAlerts.value = _preparedAlerts.value.map {
+					if (it.id == alert.id) alert.copy(status = EmergencyAlert.AlertStatus.FAILED) else it
+				}
             }
         }
     }

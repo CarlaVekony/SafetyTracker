@@ -1,11 +1,17 @@
 package com.example.safetytracker.network
 
 import android.content.Context
+import android.os.Bundle
+import android.app.PendingIntent
+import android.content.Intent
 import android.telephony.SmsManager
 import android.util.Log
+import android.provider.Telephony
 import com.example.safetytracker.data.model.EmergencyAlert
 import com.example.safetytracker.data.model.EmergencyContact
 import com.example.safetytracker.data.repository.EmergencyRepository
+import com.example.safetytracker.media.AudioUtils
+import com.example.safetytracker.network.AudioUploadClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -14,6 +20,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.flow.first
+import java.util.ArrayList
 
 /**
  * SMS Manager for sending emergency alerts
@@ -24,6 +31,7 @@ class EmergencySMSManager(
     private val repository: EmergencyRepository
 ) {
     private val smsManager = SmsManager.getDefault()
+    private val audioUploader = AudioUploadClient()
     
     companion object {
         private const val TAG = "EmergencySMSManager"
@@ -50,20 +58,50 @@ class EmergencySMSManager(
 
                 Log.i(TAG, "Sending emergency SMS to ${activeContacts.size} active contacts out of ${allContacts.size} total")
 
-                val message = formatEmergencyMessage(alert)
+	            val message = formatEmergencyMessage(alert)
                 Log.d(TAG, "Emergency message: $message")
 
                 var allSent = true
 
-                for (contact in activeContacts) {
-                    try {
-                        sendSMSToContact(contact, message)
-                        Log.i(TAG, "SMS sent successfully to ${contact.name}: ${contact.phoneNumber}")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to send SMS to ${contact.name}: ${e.message}")
-                        allSent = false
-                    }
-                }
+	            // Only attempt MMS if we are the default SMS app (required by many devices)
+	            val isDefaultSmsApp = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+	            val hasAudio = alert.audioData != null && alert.audioData.isNotEmpty()
+	            val audioUri = if (isDefaultSmsApp && hasAudio) {
+	                try { AudioUtils.writePcmToWavAndGetUri(context, alert.audioData!!) }
+	                catch (e: Exception) { Log.e(TAG, "Failed to prepare audio for MMS: ${e.message}"); null }
+	            } else null
+
+	            // If MMS is not possible but we have audio, upload and include link in SMS
+	            val uploadedUrl: String? = if (!isDefaultSmsApp && hasAudio) {
+	                try {
+	                    // Convert PCM to WAV bytes entirely in memory and upload
+	                    val wavBytes = AudioUtils.pcmToWavBytes(alert.audioData!!)
+	                    if (wavBytes != null) audioUploader.uploadWav(wavBytes) else null
+	                } catch (e: Exception) {
+	                    Log.e(TAG, "Audio upload failed: ${e.message}")
+	                    null
+	                }
+	            } else null
+
+	            for (contact in activeContacts) {
+	                try {
+	                    if (audioUri != null) {
+	                        sendMMSToContact(contact, message, audioUri)
+	                        Log.i(TAG, "MMS sent attempt to ${contact.name}: ${contact.phoneNumber}")
+	                    } else {
+	                        val smsText = if (uploadedUrl != null) {
+	                            "$message\nAudio: $uploadedUrl"
+	                        } else {
+	                            message
+	                        }
+	                        sendSMSToContact(contact, smsText)
+	                        Log.i(TAG, "SMS sent successfully to ${contact.name}: ${contact.phoneNumber}")
+	                    }
+	                } catch (e: Exception) {
+	                    Log.e(TAG, "Failed to send message to ${contact.name}: ${e.message}")
+	                    allSent = false
+	                }
+	            }
 
                 val newStatus = if (allSent) {
                     EmergencyAlert.AlertStatus.SENT
@@ -86,7 +124,7 @@ class EmergencySMSManager(
      */
     private fun sendSMSToContact(contact: EmergencyContact, message: String) {
         try {
-            val messages: ArrayList<String> = if (message.length > MAX_SMS_LENGTH) {
+	            val messages: ArrayList<String> = if (message.length > MAX_SMS_LENGTH) {
                 ArrayList(smsManager.divideMessage(message))
             } else {
                 arrayListOf(message)
@@ -105,11 +143,45 @@ class EmergencySMSManager(
             throw e
         }
     }
+
+	    /**
+	     * Attempt to send MMS with audio attachment. Falls back to SMS on unsupported devices.
+	     */
+	    private fun sendMMSToContact(contact: EmergencyContact, text: String, contentUri: android.net.Uri) {
+	        try {
+	            // Some devices require being default SMS app for MMS; this may fail silently.
+	            val config = Bundle()
+	            config.putString("address", contact.phoneNumber)
+
+	            // Add subject and text if supported by OEM
+	            config.putString("subject", "Emergency audio")
+	            config.putString("text", text)
+
+	            val sentIntent = PendingIntent.getBroadcast(
+	                context,
+	                0,
+	                Intent("com.example.safetytracker.MMS_SENT"),
+	                PendingIntent.FLAG_IMMUTABLE
+	            )
+
+	            smsManager.sendMultimediaMessage(
+	                context,
+	                contentUri,
+	                null,
+	                config,
+	                sentIntent
+	            )
+	        } catch (e: Exception) {
+	            // If MMS fails for any reason, fallback to SMS
+	            Log.e(TAG, "MMS send failed, falling back to SMS: ${e.message}")
+	            sendSMSToContact(contact, text)
+	        }
+	    }
     
     /**
      * Format emergency message with location and details
      */
-    private fun formatEmergencyMessage(alert: EmergencyAlert): String {
+	    private fun formatEmergencyMessage(alert: EmergencyAlert): String {
         val timestamp = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault())
             .format(Date(alert.timestamp))
         
@@ -122,16 +194,12 @@ class EmergencySMSManager(
         val confidence = "${(alert.detectionConfidence * 100).toInt()}%"
         
         return buildString {
-            appendLine("🚨 EMERGENCY ALERT 🚨")
-            appendLine("FALL DETECTED!")
-            appendLine()
-            appendLine("Time: $timestamp")
-            appendLine("Confidence: $confidence")
-            appendLine("Reason: ${alert.detectionReason}")
-            appendLine()
-            appendLine(location)
-            appendLine()
-            appendLine("This is an automated emergency alert from SafetyTracker.")
+	            appendLine("EMERGENCY ALERT - FALL DETECTED")
+	            appendLine("Time: $timestamp")
+	            appendLine("Confidence: $confidence")
+	            appendLine("Reason: ${alert.detectionReason}")
+	            appendLine(location)
+	            // If MMS is used, we attach; otherwise we may add URL at send time
         }
     }
     
