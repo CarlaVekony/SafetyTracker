@@ -182,9 +182,6 @@ class EmergencySMSManager(
      * Format emergency message with location and details
      */
 	    private fun formatEmergencyMessage(alert: EmergencyAlert): String {
-        val timestamp = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault())
-            .format(Date(alert.timestamp))
-        
         val location = if (alert.locationLatitude != null && alert.locationLongitude != null) {
             "Location: ${alert.locationLatitude}, ${alert.locationLongitude}"
         } else {
@@ -194,12 +191,9 @@ class EmergencySMSManager(
         val confidence = "${(alert.detectionConfidence * 100).toInt()}%"
         
         return buildString {
-	            appendLine("EMERGENCY ALERT - FALL DETECTED")
-	            appendLine("Time: $timestamp")
+	            appendLine("EMERGENCY ALERT")
 	            appendLine("Confidence: $confidence")
-	            appendLine("Reason: ${alert.detectionReason}")
 	            appendLine(location)
-	            // If MMS is used, we attach; otherwise we may add URL at send time
         }
     }
     
