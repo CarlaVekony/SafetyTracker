@@ -9,5 +9,6 @@ data class EmergencyContact(
     val id: Long = 0,
     val name: String,
     val phoneNumber: String,
-    val isPrimary: Boolean = false
+    val isPrimary: Boolean = false,
+    val isActive: Boolean = true // Active contacts receive emergency SMS
 )

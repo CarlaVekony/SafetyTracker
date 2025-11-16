@@ -19,25 +19,27 @@ data class MicrophoneReading(
 )
 
 class MicrophoneManager(private val context: Context) {
+
     private var audioRecord: AudioRecord? = null
-    private var isRecording = false
-    
+    @Volatile private var isRecording = false
+
     private val sampleRate = 44100
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-    
-    // 5-second rolling buffer: 44100 samples/sec * 2 bytes/sample * 5 seconds = 441000 bytes
-    private val audioBufferSize = sampleRate * 2 * 5 // 5 seconds of audio
-    // Use ByteArray for better performance than MutableList
+    private val minBuffer = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+
+    // 5 seconds buffer for audio (PCM16)
+    private val audioBufferSize = sampleRate * 2 * 5
     private val audioBuffer = ByteArray(audioBufferSize)
-    private var bufferWriteIndex = 0
+    private var writeIndex = 0
     private var bufferFilled = false
-    private val bufferLock = Any()
+    private val lock = Any()
 
     fun getMicrophoneData(): Flow<MicrophoneReading> = callbackFlow {
-        // Check for RECORD_AUDIO permission
-        if (ContextCompat.checkSelfPermission(
+
+        // Permission check
+        if (
+            ContextCompat.checkSelfPermission(
                 context,
                 android.Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
@@ -46,135 +48,138 @@ class MicrophoneManager(private val context: Context) {
             return@callbackFlow
         }
 
-        // Check if buffer size is valid (ERROR_BAD_VALUE is returned as a negative value)
-        if (bufferSize <= 0) {
+        if (minBuffer <= 0) {
             close()
             return@callbackFlow
         }
 
-        try {
-            audioRecord = AudioRecord.Builder()
+        // Init recorder safely
+        val recorder = try {
+            AudioRecord.Builder()
                 .setAudioSource(MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(
                     AudioFormat.Builder()
-                        .setEncoding(audioFormat)
                         .setSampleRate(sampleRate)
-                        .setChannelMask(channelConfig)
-                        .build()
+                        .setEncoding(audioFormat)
+                        .setChannelMask(channelConfig).build()
                 )
-                .setBufferSizeInBytes(bufferSize * 2)
+                .setBufferSizeInBytes(minBuffer * 2)
                 .build()
-
-            audioRecord?.let { recorder ->
-                if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-                    close()
-                    return@callbackFlow
-                }
-
-                try {
-                    isRecording = true
-                    recorder.startRecording()
-
-                    val buffer = ShortArray(bufferSize)
-
-                    while (isRecording) {
-                        val read = recorder.read(buffer, 0, buffer.size)
-                        if (read > 0) {
-                            var maxAmplitude = 0
-                            for (i in 0 until read) {
-                                maxAmplitude = max(maxAmplitude, abs(buffer[i].toInt()))
-                            }
-                            
-                            // Normalize amplitude to 0-100 range
-                            val normalizedAmplitude = (maxAmplitude / 32768.0f) * 100f
-                            
-                            // Store audio data in rolling buffer (keep last 5 seconds)
-                            // Use efficient circular buffer instead of list operations
-                            synchronized(bufferLock) {
-                                // Convert Short array to Byte array and write to circular buffer
-                                for (i in 0 until read) {
-                                    val sample = buffer[i]
-                                    audioBuffer[bufferWriteIndex] = (sample.toInt() and 0xFF).toByte()
-                                    audioBuffer[bufferWriteIndex + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
-                                    
-                                    bufferWriteIndex = (bufferWriteIndex + 2) % audioBufferSize
-                                    if (bufferWriteIndex == 0) {
-                                        bufferFilled = true
-                                    }
-                                }
-                            }
-                            
-                            val reading = MicrophoneReading(
-                                amplitude = normalizedAmplitude,
-                                timestamp = System.currentTimeMillis()
-                            )
-                            trySend(reading)
-                        } else if (read == 0) {
-                            // Send zero amplitude if no data read (silence)
-                            val reading = MicrophoneReading(
-                                amplitude = 0f,
-                                timestamp = System.currentTimeMillis()
-                            )
-                            trySend(reading)
-                        }
-                        // Small delay to prevent overwhelming the system, but read frequently
-                        delay(50) // Read every 50ms for responsive updates
-                    }
-                } catch (e: SecurityException) {
-                    // Permission was revoked or denied
-                    close()
-                }
-            }
-        } catch (@Suppress("UNUSED_PARAMETER") e: Exception) {
-            // Handle any other exceptions
+        } catch (e: Exception) {
             close()
+            return@callbackFlow
         }
 
+        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            recorder.release()
+            close()
+            return@callbackFlow
+        }
+
+        audioRecord = recorder
+        isRecording = true
+
+        try {
+            recorder.startRecording()
+        } catch (e: IllegalStateException) {
+            recorder.release()
+            close()
+            return@callbackFlow
+        }
+
+        val buffer = ShortArray(minBuffer)
+
+        // Recording loop
+        while (isRecording && audioRecord != null) {
+
+            val read = try {
+                recorder.read(buffer, 0, buffer.size)
+            } catch (e: IllegalStateException) {
+                break
+            }
+
+            if (read > 0) {
+                // amplitude calc
+                var maxAmp = 0
+                for (i in 0 until read) {
+                    maxAmp = max(maxAmp, abs(buffer[i].toInt()))
+                }
+                val normalized = (maxAmp / 32768f) * 100f
+
+                // Push into circular buffer
+                synchronized(lock) {
+                    for (i in 0 until read) {
+                        val sample = buffer[i]
+                        audioBuffer[writeIndex] = (sample.toInt() and 0xFF).toByte()
+                        audioBuffer[writeIndex + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
+
+                        writeIndex = (writeIndex + 2) % audioBufferSize
+                        if (writeIndex == 0) bufferFilled = true
+                    }
+                }
+
+                trySend(
+                    MicrophoneReading(
+                        amplitude = normalized,
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+            }
+
+            delay(50)
+        }
+
+        // Cleanup section
         awaitClose {
             isRecording = false
-            audioRecord?.stop()
-            audioRecord?.release()
+
+            try {
+                audioRecord?.let { r ->
+                    if (r.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                        r.stop()
+                    }
+                    r.release()
+                }
+            } catch (_: Exception) {}
+
             audioRecord = null
         }
     }
 
-    /**
-     * Get the last 5 seconds of audio recording as a ByteArray
-     * Returns null if no audio data is available
-     */
     fun getLast5SecondsAudio(): ByteArray? {
-        synchronized(bufferLock) {
-            return if (bufferFilled || bufferWriteIndex > 0) {
-                if (bufferFilled) {
-                    // Buffer has wrapped around, get most recent 5 seconds in chronological order
-                    val result = ByteArray(audioBufferSize)
-                    System.arraycopy(audioBuffer, bufferWriteIndex, result, 0, audioBufferSize - bufferWriteIndex)
-                    System.arraycopy(audioBuffer, 0, result, audioBufferSize - bufferWriteIndex, bufferWriteIndex)
-                    result
-                } else {
-                    // Buffer hasn't wrapped, just get what we have
-                    audioBuffer.copyOf(bufferWriteIndex)
-                }
+        synchronized(lock) {
+            if (!bufferFilled && writeIndex == 0) return null
+
+            return if (bufferFilled) {
+                val result = ByteArray(audioBufferSize)
+                System.arraycopy(audioBuffer, writeIndex, result, 0, audioBufferSize - writeIndex)
+                System.arraycopy(audioBuffer, 0, result, audioBufferSize - writeIndex, writeIndex)
+                result
             } else {
-                null
+                audioBuffer.copyOf(writeIndex)
             }
         }
     }
 
-    /**
-     * Clear the audio buffer
-     */
     fun clearBuffer() {
-        synchronized(bufferLock) {
-            bufferWriteIndex = 0
+        synchronized(lock) {
+            writeIndex = 0
             bufferFilled = false
         }
     }
 
     fun stop() {
         isRecording = false
-        audioRecord?.stop()
-        audioRecord?.release()
+
+        try {
+            audioRecord?.let { r ->
+                if (r.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    r.stop()
+                }
+                r.release()
+            }
+        } catch (_: Exception) {}
+
         audioRecord = null
     }
 }

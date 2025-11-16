@@ -79,28 +79,30 @@ fun HomeScreen(
 		}
 	}
     
-    // Share sensor managers with EmergencyAlertService to avoid duplicates
-    // Get sensor flows from SensorDataManager's internal managers
-	if (enableEmergencyMonitoring) {
-		LaunchedEffect(isMonitoring) {
-			if (isMonitoring) {
-				// Create managers for emergency detection (separate from graph display)
-				val accManager = AccelerometerManager(context)
-				val gyroManager = GyroscopeManager(context)
-				val micManager = MicrophoneManager(context)
-				val gpsMgr = GPSManager(context)
-				
-				val accFlow = accManager.getAccelerometerData()
-				val gyroFlow = gyroManager.getGyroscopeData()
-				val micFlow = micManager.getMicrophoneData()
-				val locationFlow = gpsMgr.getLocationData()
-				
-				emergencyService.startMonitoring(accFlow, gyroFlow, micFlow, locationFlow)
-			} else {
-				emergencyService.stopMonitoring()
-			}
-		}
-	}
+	// Share sensor managers with EmergencyAlertService to avoid duplicates
+	// Use service's own MicrophoneManager to keep the rolling buffer filled
+    LaunchedEffect(isMonitoring) {
+        if (isMonitoring) {
+            // Get sensor managers from SensorDataManager (they're already created there)
+            // We'll pass the flows directly - but we need to access them
+            // Actually, we need to create separate managers for emergency detection
+            // to avoid conflicts. But we can optimize by throttling checks.
+            
+			// Create managers for emergency detection (separate from graph display)
+            val accManager = AccelerometerManager(context)
+            val gyroManager = GyroscopeManager(context)
+            val gpsMgr = GPSManager(context)
+            
+            val accFlow = accManager.getAccelerometerData()
+            val gyroFlow = gyroManager.getGyroscopeData()
+            val locationFlow = gpsMgr.getLocationData()
+            
+			// Pass null for micFlow so the service uses its own MicrophoneManager
+			emergencyService.startMonitoring(accFlow, gyroFlow, null, locationFlow)
+        } else {
+            emergencyService.stopMonitoring()
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Surface(modifier = Modifier.fillMaxSize()) {

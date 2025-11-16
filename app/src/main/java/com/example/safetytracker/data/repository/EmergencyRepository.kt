@@ -6,6 +6,7 @@ import com.example.safetytracker.data.database.SafetyDatabase
 import com.example.safetytracker.data.model.EmergencyContact
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 
 class EmergencyRepository(context: Context) {
     private val database = SafetyDatabase.getDatabase(context)
@@ -139,4 +140,30 @@ class EmergencyRepository(context: Context) {
             0
         }
     }
+    
+    // Get active contacts only with logging
+    fun getActiveContacts(): Flow<List<EmergencyContact>> {
+        Log.d(TAG, "Fetching active emergency contacts")
+        return contactDao.getAllContacts().map { contacts ->
+            val activeContacts = contacts.filter { it.isActive }
+            Log.d(TAG, "Retrieved ${activeContacts.size} active contacts out of ${contacts.size} total")
+            activeContacts
+        }
+    }
+    
+    // Get active contact count
+    suspend fun getActiveContactCount(): Int {
+        Log.d(TAG, "Fetching active contact count")
+
+        return try {
+            val allContacts = contactDao.getAllContacts().first()  // <-- colectare Flow
+            val count = allContacts.count { it.isActive }
+            Log.d(TAG, "Active contacts in database: $count")
+            count
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get active contact count: ${e.message}")
+            0
+        }
+    }
+
 }
