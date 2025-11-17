@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Service that coordinates emergency detection and alert preparation
@@ -46,6 +48,7 @@ class EmergencyAlertService(
     private var lastAlertTime: Long = 0
     private val alertCooldownMs = 10000L // 10 seconds cooldown between alerts
     private val checkThrottleMs = 200L // Only check for emergency every 200ms (throttle)
+    private val emergencyCheckMutex = Mutex() // Prevents race condition in emergency detection
     
     companion object {
         private const val TAG = "EmergencyAlertService"
@@ -144,8 +147,9 @@ class EmergencyAlertService(
     /**
      * Check if current sensor readings indicate an emergency
      * Monitoring continues after alerts are prepared
+     * Uses mutex to prevent race conditions when multiple coroutines check simultaneously
      */
-    private fun checkForEmergency() {
+    private suspend fun checkForEmergency() {
         if (!isMonitoring) return
         
         val result = fallDetectionAlgorithm.detectFall(
@@ -155,14 +159,17 @@ class EmergencyAlertService(
         )
         
         if (result.isEmergency) {
-            val currentTime = System.currentTimeMillis()
-            // Only prepare alert if cooldown period has passed (prevents spam)
-            if (currentTime - lastAlertTime >= alertCooldownMs) {
-                Log.w(TAG, "Emergency detected! Confidence: ${result.confidence}, Reason: ${result.reason}")
-                prepareEmergencyAlert(result)
-                lastAlertTime = currentTime
-            } else {
-                Log.d(TAG, "Emergency detected but in cooldown period. Monitoring continues...")
+            // Use mutex to ensure only one alert is prepared at a time
+            emergencyCheckMutex.withLock {
+                val currentTime = System.currentTimeMillis()
+                // Only prepare alert if cooldown period has passed (prevents spam)
+                if (currentTime - lastAlertTime >= alertCooldownMs) {
+                    Log.w(TAG, "Emergency detected! Confidence: ${result.confidence}, Reason: ${result.reason}")
+                    prepareEmergencyAlert(result)
+                    lastAlertTime = currentTime
+                } else {
+                    Log.d(TAG, "Emergency detected but in cooldown period. Monitoring continues...")
+                }
             }
         }
         // Monitoring continues regardless of whether alert was prepared

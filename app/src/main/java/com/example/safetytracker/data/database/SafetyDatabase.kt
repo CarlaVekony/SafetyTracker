@@ -29,7 +29,7 @@ abstract class SafetyDatabase : RoomDatabase() {
                     SafetyDatabase::class.java,
                     "safety_database"
                 )
-                    .fallbackToDestructiveMigration()   // 🔥 FIX: previne crash-urile Room
+                    .fallbackToDestructiveMigration()
                     .build()
 
                 INSTANCE = instance
